@@ -5,7 +5,7 @@ customtkinter.set_appearance_mode("dark")
 customtkinter.set_default_color_theme("green")
 
 root = customtkinter.CTk()
-root.title("CustomTkinter Test")
+root.title("Initiative Tracker v1.0")
 root.geometry("450x500")
 
 # Preset players and display settings.
