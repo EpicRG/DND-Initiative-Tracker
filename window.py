@@ -1,200 +1,99 @@
 import customtkinter
+import configparser
+from pathlib import Path
 import Backend
 
 customtkinter.set_appearance_mode("dark")
 customtkinter.set_default_color_theme("green")
 
-class App(customtkinter.CTk):
-    def __init__(self):
-        super().__init__()
+root = customtkinter.CTk()
+root.title("CustomTkinter Test")
+root.geometry("450x500")
 
-        self.title("DND Initiative Tracker")
-        self.geometry("900x700")
+# Import player names from a .ini file
 
-        # Reserve space for the active and dead initiative lists.
-        bottom_frame = customtkinter.CTkFrame(master=self)
-        bottom_frame.pack(side="bottom", pady=(10, 20), padx=(20, 20), fill="x")
-        bottom_frame.configure(height=360)
-        # Prevent the frame from shrinking around its children.
-        bottom_frame.pack_propagate(False)
+def load_player_names():
+    config = configparser.ConfigParser()
+    settings_path = Path(__file__).with_name("settings.ini")
+    config.read(settings_path)
 
-        # Keep preset-character controls in a fixed sidebar on the left.
-        # master identifies the parent widget that owns this frame.
-        left_frame = customtkinter.CTkFrame(master=self)
-        left_frame.pack(side="left", pady=(20, 10), padx=(20, 10), fill="y")
-        left_frame.grid_columnconfigure(1, weight=1)
-        left_frame.sidebar_frame = customtkinter.CTkFrame(left_frame, width=140, corner_radius=0)
-        left_content = customtkinter.CTkFrame(master=left_frame, fg_color="transparent")
-        left_content.pack(pady=(5, 0), anchor="n")
+    names = config.get("players", "names", fallback="")
+    return [name.strip() for name in names.split(",") if name.strip()]
 
-        # Expand the main area between the sidebar and the leaderboard.
-        frame = customtkinter.CTkFrame(master=self)
-        frame.pack(pady=(20, 10), padx=(10, 20), fill="both", expand=True)
+# Preset players and display settings.
+PLAYER_NAMES = load_player_names()
+DEAD_BUTTON_COLOR = "#555555"
 
+# Application state: widgets are kept so their values can be read later.
+player_entries = []
+custom_characters = []
+dead_characters = set()
 
+# Create the preset-character checkboxes and hidden roll fields.
+def creat_checkbox_loop():
+    for index, name in enumerate(PLAYER_NAMES):
+        player_row = customtkinter.CTkFrame(player_frame)
+        player_row.grid(row=index, column=0, columnspan=2, sticky="ew", padx=10, pady=6)
+        player_row.grid_columnconfigure(1, weight=1)
 
-        leaderboard_label = customtkinter.CTkLabel(master=bottom_frame, text="Initiative Order", font=("Roboto Medium", 25))
-        leaderboard_label.pack(pady=12, padx=10)
+        player_checkbox = customtkinter.CTkCheckBox(player_row, text=name)
+        player_checkbox.grid(row=0, column=0, sticky="w")
 
-        # CTkCanvas is a regular Tk widget, so it needs its background updated
-        # manually when CustomTkinter switches between light and dark themes.
-        self.order_canvas = customtkinter.CTkCanvas(
-            master=bottom_frame,
-            height=280,
-            highlightthickness=0,
-            bg=self._frame_background_color(),
-        )
-        self.order_canvas.pack(fill="both", expand=True, padx=10, pady=(4, 0))
+        ask_for_roll = customtkinter.CTkEntry(player_row, placeholder_text="Roll")
+        ask_for_roll.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=(0, 0))
+        ask_for_roll.grid_remove()
 
-        # This scrollbar is shown only when more than eight entries exist.
-        self.order_scrollbar = customtkinter.CTkScrollbar(
-            master=bottom_frame,
-            orientation="horizontal",
-            command=self.order_canvas.xview,
-        )
-        self.order_canvas.configure(xscrollcommand=self.order_scrollbar.set)
-
-        # Keep active and dead entries together inside the scrollable canvas.
-        self.leaderboard_content = customtkinter.CTkFrame(
-            master=self.order_canvas,
-            fg_color="transparent",
-        )
-        self.order_canvas.create_window(
-            (0, 0),
-            window=self.leaderboard_content,
-            anchor="nw",
-        )
-        self.leaderboard_content.bind(
-            "<Configure>",
-            # Recalculate the scrollable area whenever the content changes size.
-            lambda event: self.order_canvas.configure(
-                scrollregion=self.order_canvas.bbox("all")
-            ),
-        )
-
-        self.order_grid = customtkinter.CTkFrame(master=self.leaderboard_content, fg_color="transparent")
-        self.order_grid.pack(fill="x", pady=(4, 8), padx=10)
-
-        dead_label = customtkinter.CTkLabel(master=self.leaderboard_content, text="Dead", font=("Roboto Medium", 20))
-        dead_label.pack(pady=(4, 0), padx=10, anchor="w")
-
-        self.dead_grid = customtkinter.CTkFrame(master=self.leaderboard_content, fg_color="transparent")
-        self.dead_grid.pack(fill="x", pady=(4, 8), padx=10)
-
-        content_frame = customtkinter.CTkFrame(master=frame, fg_color="transparent")
-        content_frame.place(relx=0.5, y=10, anchor="n")
-
-        title_label = customtkinter.CTkLabel(master=content_frame, text="Initiative Tracker", font=("Roboto Medium", 25))
-        title_label.pack(pady=12, padx=10)
-
-        self.order_text = customtkinter.CTkLabel(master=content_frame, text="", font=("Roboto Medium", 16))
-        self.order_text.pack(pady=(0, 8), padx=10)
-
-        controls_frame = customtkinter.CTkFrame(master=content_frame, fg_color="transparent")
-        controls_frame.pack(anchor="center")
-
-
-        #Left sidebar with checkboxes and entries for characters
-
-        # Mitgalad
-        mitgalad_row = customtkinter.CTkFrame(master=left_content)
-        mitgalad_row.pack(anchor="w", pady=6, padx=10)
-        mitgalad_row.configure(height=75, width=220)
-        mitgalad_row.pack_propagate(False)
-        include_mitgalad = customtkinter.CTkCheckBox(master=mitgalad_row, text="Include Mitgalad?")
-        include_mitgalad.pack(anchor="w")
-        mitgalad_roll_entry = customtkinter.CTkEntry(master=mitgalad_row, placeholder_text="Mitgalad Roll")
-        mitgalad_roll_entry.pack_forget()
-        # command runs when the checkbox is clicked, after the UI is created.
-        include_mitgalad.configure(command=lambda: self.toggle_entry(include_mitgalad, mitgalad_roll_entry))
-
-        # Erran
-        erran_row = customtkinter.CTkFrame(master=left_content)
-        erran_row.pack(anchor="w", pady=6, padx=10)
-        erran_row.configure(height=75, width=220)
-        erran_row.pack_propagate(False)
-        include_erran = customtkinter.CTkCheckBox(master=erran_row, text="Include Erran?")
-        include_erran.pack(anchor="w")
-        erran_roll_entry = customtkinter.CTkEntry(master=erran_row, placeholder_text="Erran Roll")
-        erran_roll_entry.pack_forget()
-        include_erran.configure(command=lambda: self.toggle_entry(include_erran, erran_roll_entry))
-
-        # L
-        l_row = customtkinter.CTkFrame(master=left_content)
-        l_row.pack(anchor="w", pady=6, padx=10)
-        l_row.configure(height=75, width=220)
-        l_row.pack_propagate(False)
-        include_l = customtkinter.CTkCheckBox(master=l_row, text="Include L?")
-        include_l.pack(anchor="w")
-        l_roll_entry = customtkinter.CTkEntry(master=l_row, placeholder_text="L Roll")
-        l_roll_entry.pack_forget()
-        include_l.configure(command=lambda: self.toggle_entry(include_l, l_roll_entry))
-
-
-        # Controls for adding custom characters one at a time.
+        player_row.configure(height=ask_for_roll.cget("height"))
+        player_row.grid_propagate(False)
         
-        name_entry = customtkinter.CTkEntry(master=controls_frame, placeholder_text="Character Name")
-        name_entry.pack(pady=6, padx=10)
 
-        roll_entry = customtkinter.CTkEntry(master=controls_frame, placeholder_text="Initiative Roll")
-        roll_entry.pack(pady=6, padx=10)
-
-        enter_button = customtkinter.CTkButton(master=controls_frame, text="Enter", command=self.submit_entries,)
-        enter_button.pack(pady=6, padx=10)
-        self.bind("<Return>", lambda event: enter_button.invoke())
-        self.bind("<KP_Enter>", lambda event: enter_button.invoke())
-
-        reset_button = customtkinter.CTkButton(
-            master=controls_frame,
-            text="Reset",
-            command=self.reset_entries,
-            fg_color="#B22222",
-            hover_color="#DC143C",
+        player_checkbox.configure(
+            command=lambda checkbox=player_checkbox, entry=ask_for_roll: toggle_button(checkbox, entry)
         )
-        reset_button.pack(pady=6, padx=10)
+        player_entries.append((name, player_checkbox, ask_for_roll))
 
-        self.entries = [
-            ("Mitgalad", include_mitgalad, mitgalad_roll_entry),
-            ("Erran", include_erran, erran_roll_entry),
-            ("L", include_l, l_roll_entry),
-        ]
-        self.custom_characters = []
-        self.dead_characters = set()
-        self.name_entry = name_entry
-        self.roll_entry = roll_entry
+# Show or hide a preset character's roll field.
+def toggle_button(checkbox, entry):
+    if checkbox.get():
+        entry.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+    else:
+        entry.grid_forget()
 
-    def _frame_background_color(self):
-        frame_colors = customtkinter.ThemeManager.theme["CTkFrame"]["fg_color"]
-        return self._apply_appearance_mode(frame_colors)
+    list_character_and_rolls()
 
-    def _set_appearance_mode(self, mode_string):
-        super()._set_appearance_mode(mode_string)
-        if hasattr(self, "order_canvas"):
-            self.order_canvas.configure(bg=self._frame_background_color())
+# Create the custom-character inputs and control buttons.
+def buttons():
+    creat_checkbox_loop()
 
+    character_entry = customtkinter.CTkEntry(button_frame, placeholder_text="Enter character name",)
+    character_entry.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(10, 0), padx=6)
 
-    # Show a preset character's roll field only while its checkbox is selected.
-    def toggle_entry(self, checkbox, entry):
-        if checkbox.get():
-            entry.pack(anchor="w", pady=12, padx=10)
-        else:
-            entry.pack_forget()
-            self.update_leaderboard()
+    character_roll_entry = customtkinter.CTkEntry(button_frame,placeholder_text="Enter roll",)
+    character_roll_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0), padx=6)
 
-    # Validate and save a custom character, then refresh the leaderboard.
-    def submit_entries(self):
-        character_name = self.name_entry.get().strip()
-        character_roll = self.roll_entry.get().strip()
-        if character_name and character_roll:
-            try:
-                roll = Backend.parse_roll(character_name, character_roll)
-            except ValueError as error:
-                self.order_text.configure(text=str(error))
-                return
-        elif character_name or character_roll:
-            self.order_text.configure(text="Enter both a character name and a roll.")
+    reset_button = customtkinter.CTkButton(button_frame, text="Reset", width=90, height=75, fg_color="#B22222", hover_color="#DC143C", command=reset_entries,)
+    reset_button.grid(row=2, column=1, columnspan=1, sticky="news", pady=(10, 0), padx=(6, 0))
+    
+    add_character_button = customtkinter.CTkButton(button_frame, text="Add Character", width=90, height=40, command=lambda: add_character(character_entry, character_roll_entry),)
+    add_character_button.grid(row=2, column=0, sticky="news", pady=(10, 0), padx=(6, 0))
+
+    root.bind("<Return>", lambda event:  add_character_button.invoke())
+    root.bind("<KP_Enter>", lambda event:  add_character_button.invoke())
+
+def list_character_and_rolls():
+    # Read all characters, sort them, and redraw both lists.
+    # Start with custom characters, then add only the checked preset players.
+    characters = list(custom_characters)
+    for name, checkbox, roll_entry in player_entries:
+        if not checkbox.get():
+            continue
+        try:
+            characters.append((name, Backend.parse_roll(name, roll_entry.get().strip())))
+        except ValueError as error:
+            print(error)
             return
 
+    # Keep the sorting rule in Backend so the window only handles display.
     sorted_characters = Backend.sort_initiative_order(characters)
     active_characters, dead_characters_in_order = Backend.split_dead_characters(sorted_characters,dead_characters,)
 
@@ -220,7 +119,7 @@ def clear_frame(frame):
 
 # Add one clickable character button to a list frame.
 def render_character(frame, row, character, text, command, color=None):
-    """Create one clickable character button in a list frame."""
+    #Create one clickable character button in a list frame.
     options = {"anchor": "w", "command": lambda: command(character)}
     if color:
         options["fg_color"] = color
@@ -230,13 +129,13 @@ def render_character(frame, row, character, text, command, color=None):
 
 
 def move_to_dead(character):
-    """Move a character from the active list to the dead list."""
+    # Move a character from the active list to the dead list."""
     dead_characters.add(character)
     list_character_and_rolls()
 
 
 def move_to_active(character):
-    """Move a character from the dead list back to the active list."""
+    # Move a character from the dead list back to the active list.
     dead_characters.discard(character)
     list_character_and_rolls()
 
@@ -245,17 +144,39 @@ def add_character(name_entry, roll_entry):
     name = name_entry.get().strip()
     roll_text = roll_entry.get().strip()
 
-    if not name or not roll_text:
-        print("Enter both a character name and a roll.")
+    # Validate every selected player's roll before updating the list.
+    selected_players = []
+    for player_name, checkbox, player_roll_entry in player_entries:
+        if not checkbox.get():
+            continue
+
+        try:
+            player_roll = Backend.parse_roll(player_name, player_roll_entry.get().strip())
+        except ValueError as error:
+            print(error)
+            return
+
+        selected_players.append((player_name, player_roll))
+
+    # Custom character fields must be either both filled or both empty.
+    if bool(name) != bool(roll_text):
         return
 
-    try:
-        roll = Backend.parse_roll(name, roll_text)
-    except ValueError as error:
-        print(error)
+    # A custom character is optional; selected preset players are enough.
+    custom_character = None
+    if name and roll_text:
+        try:
+            custom_character = (name, Backend.parse_roll(name, roll_text))
+        except ValueError as error:
+            print(error)
+            return
+
+    # Do not refresh the lists when the user submitted no characters at all.
+    if not selected_players and custom_character is None:
         return
 
-    custom_characters.append((name, roll))
+    if custom_character is not None:
+        custom_characters.append(custom_character)
 
     name_entry.delete(0, "end")
     roll_entry.delete(0, "end")
@@ -264,7 +185,7 @@ def add_character(name_entry, roll_entry):
 
 
 def reset_entries():
-    """Clear custom characters, selected players, and dead status."""
+    # Clear custom characters, selected players, and dead status.
     custom_characters.clear()
     dead_characters.clear()
 
@@ -279,28 +200,28 @@ def reset_entries():
 main_frame = customtkinter.CTkFrame(master=root)
 main_frame.pack(fill="both", expand=True)
 
-#The fraim all other frames are inn
+# The fraim all other frames are inn
 main_frame.grid_columnconfigure(0, weight=2)
 main_frame.grid_columnconfigure(1, weight=1)
 main_frame.grid_rowconfigure(1, weight=1)
 
-#Right Panel
+# Right Panel
 button_frame = customtkinter.CTkFrame(master=main_frame)
 button_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 button_frame.grid_columnconfigure((0, 1), weight=2)
 
-#Left Panel
+# Left Panel
 player_frame = customtkinter.CTkFrame(master=main_frame, width=200, height=170)
 player_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
 player_frame.grid_propagate(False)
 player_frame.grid_columnconfigure((0, 1), weight=2)
 
-#Bottom left Panel
+# Bottom left Panel
 list_frame = customtkinter.CTkFrame(master=main_frame, width=200, height=300)
 list_frame.grid(row=1, column=0, sticky="nswe", padx=5, pady=5)
 list_frame.grid_columnconfigure(0, weight=1)
 
-#Bottom right Panal
+# Bottom right Panal
 dead_list_frame = customtkinter.CTkFrame(master=main_frame, width=200, height=300)
 dead_list_frame.grid(row=1, column=1, sticky="nswe", padx=5, pady=5)
 dead_list_frame.grid_columnconfigure(0, weight=1)
